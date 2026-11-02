@@ -33,25 +33,127 @@ const SEED_RECIPES = [
 ];
 
 /* ---------- state ---------- */
-let state = load();
+const $ = (id) => document.getElementById(id);
+const CACHE_KEY = "ck:cache";
+const OUTBOX_KEY = "ck:outbox";
+const PASS_KEY = "ck:passcode";
+const OLD_KEY = "courtyard-kitchen:v1"; // browser-only version of the app
+
+const store = {
+  get(k, fallback) { try { const v = JSON.parse(localStorage.getItem(k)); return v ?? fallback; } catch { return fallback; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* storage unavailable */ } },
+  del(k) { try { localStorage.removeItem(k); } catch { /* ignore */ } },
+};
+
+let state = store.get(CACHE_KEY, { recipes: [], plan: {}, checked: {} });
+let outbox = store.get(OUTBOX_KEY, []);
+let passcode = store.get(PASS_KEY, "");
 let weekStart = mondayOf(new Date());
 let editingId = null;
 let viewingId = null;
 let pickTarget = null;
+let flushing = false;
 
-function load() {
+function save() { store.set(CACHE_KEY, state); }
+
+function setStatus(text) { $("status").textContent = text; }
+
+async function api(method, path, body) {
+  const res = await fetch(path, {
+    method,
+    headers: { "x-passcode": passcode, ...(body ? { "content-type": "application/json" } : {}) },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (res.status === 401) { const e = new Error("auth"); e.auth = true; throw e; }
+  if (!res.ok) { const e = new Error(`HTTP ${res.status}`); e.status = res.status; throw e; }
+  return res.json();
+}
+
+// Local change first, then queue the server write so the app works offline.
+function mutate(method, path, body) {
+  outbox.push({ method, path, body });
+  store.set(OUTBOX_KEY, outbox);
+  save();
+  flush();
+}
+
+async function flush() {
+  if (flushing) return true;
+  flushing = true;
   try {
-    const saved = JSON.parse(localStorage.getItem(STORE_KEY));
-    if (saved && Array.isArray(saved.recipes)) return saved;
-  } catch (e) { /* storage unavailable or corrupt: start fresh */ }
-  return { recipes: SEED_RECIPES, plan: {}, checked: {} };
+    while (outbox.length) {
+      const job = outbox[0];
+      try {
+        await api(job.method, job.path, job.body);
+      } catch (e) {
+        if (e.auth) throw e;
+        if (!e.status || e.status >= 500) throw e; // network or server trouble: keep and retry later
+        // other 4xx: the server rejected it for good, drop it
+      }
+      outbox.shift();
+      store.set(OUTBOX_KEY, outbox);
+    }
+    return true;
+  } catch (e) {
+    if (e.auth) askPasscode(); else setStatus("Offline — changes will sync when you're back");
+    return false;
+  } finally {
+    flushing = false;
+  }
 }
-function save() {
-  try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); } catch (e) { /* ignore */ }
+
+async function sync() {
+  if (!passcode) { askPasscode(); return; }
+  setStatus("Syncing…");
+  try {
+    if (!(await flush())) return;
+    await migrateOldData();
+    let remote = await api("GET", "/api/state");
+    if (!remote.recipes.length) {
+      await api("POST", "/api/seed", { recipes: SEED_RECIPES });
+      remote = await api("GET", "/api/state");
+    }
+    if (outbox.length) return; // new local edits landed meanwhile; they flush then sync again
+    state = remote;
+    save();
+    render();
+sync();
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
+    setStatus("Synced with the family");
+  } catch (e) {
+    if (e.auth) askPasscode(); else setStatus("Offline — showing saved copy");
+  }
 }
+
+// Recipes and plans saved by the old browser-only version move to the server once.
+async function migrateOldData() {
+  const old = store.get(OLD_KEY, null);
+  if (!old || !Array.isArray(old.recipes)) return;
+  await api("POST", "/api/seed", { recipes: old.recipes });
+  for (const [day, meals] of Object.entries(old.plan || {})) {
+    for (const [meal, recipeId] of Object.entries(meals)) {
+      await api("PUT", `/api/plan/${day}/${meal}`, { recipeId }).catch(() => {});
+    }
+  }
+  store.del(OLD_KEY);
+}
+
+function askPasscode() {
+  setStatus("Passcode needed");
+  const d = $("loginDialog");
+  if (!d.open) d.showModal();
+}
+$("loginForm").addEventListener("submit", (e) => {
+  e.preventDefault();
+  passcode = $("passcodeInput").value.trim();
+  store.set(PASS_KEY, passcode);
+  $("loginDialog").close();
+  sync();
+});
+window.addEventListener("online", sync);
+document.addEventListener("visibilitychange", () => { if (!document.hidden) sync(); });
 
 /* ---------- helpers ---------- */
-const $ = (id) => document.getElementById(id);
 function el(tag, props = {}, ...kids) {
   const n = document.createElement(tag);
   for (const [k, v] of Object.entries(props)) {
@@ -108,6 +210,8 @@ document.querySelectorAll(".arches button").forEach((b) =>
     document.querySelectorAll(".arches button").forEach((x) => x.classList.toggle("active", x === b));
     document.querySelectorAll(".panel").forEach((p) => p.classList.toggle("active", p.id === b.dataset.tab));
     render();
+sync();
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
   })
 );
 
@@ -145,14 +249,22 @@ function openPicker(key, meal, dayName) {
   sorted.forEach((r) =>
     list.append(el("button", { type: "button", onclick: () => {
       (state.plan[key] ||= {})[meal] = r.id;
-      save(); $("pickDialog").close(); render();
+      mutate("PUT", `/api/plan/${key}/${meal}`, { recipeId: r.id });
+      $("pickDialog").close(); render();
+sync();
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
     } }, `${r.name} · ${r.type}`))
   );
   $("pickDialog").showModal();
 }
 $("clearSlot").onclick = () => {
-  if (pickTarget && state.plan[pickTarget.key]) delete state.plan[pickTarget.key][pickTarget.meal];
-  save(); $("pickDialog").close(); render();
+  if (pickTarget && state.plan[pickTarget.key]) {
+    delete state.plan[pickTarget.key][pickTarget.meal];
+    mutate("DELETE", `/api/plan/${pickTarget.key}/${pickTarget.meal}`);
+  }
+  $("pickDialog").close(); render();
+sync();
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
 };
 $("cancelPick").onclick = () => $("pickDialog").close();
 
@@ -220,7 +332,11 @@ $("recipeForm").addEventListener("submit", () => {
   };
   const i = state.recipes.findIndex((x) => x.id === r.id);
   if (i >= 0) state.recipes[i] = r; else state.recipes.push(r);
-  save(); render();
+  const { id, ...fields } = r;
+  mutate("PUT", `/api/recipes/${id}`, fields);
+  render();
+sync();
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
 });
 $("deleteRecipe").onclick = () => {
   const r = recipeById(editingId);
@@ -229,7 +345,10 @@ $("deleteRecipe").onclick = () => {
   for (const day of Object.values(state.plan)) {
     for (const m of Object.keys(day)) if (day[m] === editingId) delete day[m];
   }
-  save(); $("recipeDialog").close(); render();
+  mutate("DELETE", `/api/recipes/${editingId}`);
+  $("recipeDialog").close(); render();
+sync();
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
 };
 
 /* ---------- shopping list ---------- */
@@ -266,14 +385,22 @@ function renderShop() {
     const label = [it.hasQty ? fmtQty(it.qty) : "", it.unit, it.name].filter(Boolean).join(" ");
     const cb = el("input", { type: "checkbox", checked: !!checked[key], onchange: () => {
       if (cb.checked) checked[key] = true; else delete checked[key];
-      save(); renderShop();
+      mutate("PUT", `/api/checked/${wk}`, { item: key, checked: cb.checked });
+      renderShop();
     } });
     section.append(el("label", { class: "item" + (checked[key] ? " done" : "") }, cb, el("span", {}, label)));
   });
   box.append(section);
 }
-$("clearChecked").onclick = () => { state.checked[dateKey(weekStart)] = {}; save(); renderShop(); };
+$("clearChecked").onclick = () => {
+  const wk = dateKey(weekStart);
+  state.checked[wk] = {};
+  mutate("DELETE", `/api/checked/${wk}`);
+  renderShop();
+};
 
 /* ---------- boot ---------- */
 function render() { renderWeek(); renderRecipes(); renderShop(); }
 render();
+sync();
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});

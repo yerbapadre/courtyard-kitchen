@@ -8,6 +8,12 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&family=Nunito+Sans:wght@400;600&display=swap" rel="stylesheet">
+  <meta name="theme-color" content="#b8532f">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="La Corte">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -103,7 +109,17 @@
     </div>
   </dialog>
 
-  <footer>Made with love for the family table 🍋</footer>
+  <dialog id="loginDialog">
+    <form id="loginForm">
+      <h3>Welcome to La Corte</h3>
+      <label>Family passcode
+        <input id="passcodeInput" type="password" autocomplete="current-password" required>
+      </label>
+      <div class="actions"><span class="spacer"></span><button type="submit" class="primary">Enter</button></div>
+    </form>
+  </dialog>
+
+  <footer><span id="status" role="status">Starting…</span><br>Made with love for the family table 🍋</footer>
   <script src="app.js"></script>
 </body>
 </html>

@@ -1,0 +1,14 @@
+{
+  "name": "courtyard-kitchen",
+  "private": true,
+  "scripts": {
+    "dev": "wrangler dev",
+    "db:local": "wrangler d1 migrations apply DB --local",
+    "db:remote": "wrangler d1 migrations apply DB --remote",
+    "deploy": "wrangler deploy",
+    "icons": "python3 scripts/make-icons.py"
+  },
+  "devDependencies": {
+    "wrangler": "^4"
+  }
+}
