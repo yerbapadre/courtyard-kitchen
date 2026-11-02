@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>La Corte — Family Kitchen</title>
+  <meta name="description" content="Plan the week's meals, keep the family recipes, and build the shopping list.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&family=Nunito+Sans:wght@400;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="hero">
+    <svg class="cypress" viewBox="0 0 40 120" aria-hidden="true"><path d="M20 2C30 30 36 60 30 118H10C4 60 10 30 20 2Z"/></svg>
+    <div class="title">
+      <p class="eyebrow">Casa Evans</p>
+      <h1>La Corte</h1>
+      <p class="sub">the family kitchen courtyard</p>
+    </div>
+    <svg class="cypress right" viewBox="0 0 40 120" aria-hidden="true"><path d="M20 2C30 30 36 60 30 118H10C4 60 10 30 20 2Z"/></svg>
+  </header>
+
+  <nav class="arches" role="tablist">
+    <button role="tab" data-tab="plan" class="active">Weekly Table</button>
+    <button role="tab" data-tab="recipes">Recipe Book</button>
+    <button role="tab" data-tab="shop">Market List</button>
+  </nav>
+
+  <main>
+    <section id="plan" class="panel active">
+      <div class="panel-head">
+        <button id="prevWeek" class="ghost" aria-label="Previous week">‹</button>
+        <h2 id="weekLabel"></h2>
+        <button id="nextWeek" class="ghost" aria-label="Next week">›</button>
+      </div>
+      <div id="week" class="week"></div>
+    </section>
+
+    <section id="recipes" class="panel">
+      <div class="panel-head">
+        <input id="search" type="search" placeholder="Search recipes or ingredients…">
+        <button id="newRecipe" class="primary">+ New recipe</button>
+      </div>
+      <div id="recipeGrid" class="cards"></div>
+    </section>
+
+    <section id="shop" class="panel">
+      <div class="panel-head">
+        <h2>Market list for this week</h2>
+        <button id="clearChecked" class="ghost">Clear checked</button>
+      </div>
+      <div id="shopList"></div>
+    </section>
+  </main>
+
+  <dialog id="recipeDialog">
+    <form method="dialog" id="recipeForm">
+      <h3 id="dialogTitle">Recipe</h3>
+      <label>Name <input name="name" required></label>
+      <div class="row">
+        <label>Serves <input name="servings" type="number" min="1" value="4"></label>
+        <label>Minutes <input name="minutes" type="number" min="0" value="30"></label>
+        <label>Type
+          <select name="type">
+            <option>Breakfast</option><option>Lunch</option><option selected>Dinner</option><option>Dessert</option>
+          </select>
+        </label>
+      </div>
+      <label>Ingredients <small>one per line, e.g. “2 cups flour” or “1 lb spaghetti”</small>
+        <textarea name="ingredients" rows="7"></textarea>
+      </label>
+      <label>Steps <small>one per line</small>
+        <textarea name="steps" rows="6"></textarea>
+      </label>
+      <div class="actions">
+        <button type="button" id="deleteRecipe" class="danger">Delete</button>
+        <span class="spacer"></span>
+        <button type="button" id="cancelRecipe" class="ghost">Cancel</button>
+        <button type="submit" class="primary">Save</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="pickDialog">
+    <form method="dialog">
+      <h3 id="pickTitle">Choose a recipe</h3>
+      <div id="pickList" class="pick"></div>
+      <div class="actions">
+        <button type="button" id="clearSlot" class="ghost">Clear slot</button>
+        <span class="spacer"></span>
+        <button type="button" id="cancelPick" class="ghost">Close</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="viewDialog">
+    <article id="viewBody"></article>
+    <div class="actions">
+      <button id="editFromView" class="ghost">Edit</button>
+      <span class="spacer"></span>
+      <button id="closeView" class="primary">Close</button>
+    </div>
+  </dialog>
+
+  <footer>Made with love for the family table 🍋</footer>
+  <script src="app.js"></script>
+</body>
+</html>
